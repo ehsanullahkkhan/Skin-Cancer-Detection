@@ -1,30 +1,48 @@
 import json
+import os
+import requests
 import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
-from huggingface_hub import hf_hub_download
 
 st.set_page_config(
     page_title="Skin Cancer Detection",
     page_icon="🩹"
 )
 
+MODEL_URL = "https://huggingface.co/Ehsikhan/Skin-Cancer-Detection/resolve/main/best_skin_cancer_model.keras"
+MODEL_PATH = "/tmp/best_skin_cancer_model.keras"
+
 
 @st.cache_resource
 def load_artifacts():
 
-    # Download model from Hugging Face
-    model_path = hf_hub_download(
-        repo_id="Ehsikhan/Skin-Cancer-Detection",
-        filename="best_skin_cancer_model.keras"
-    )
+    # Step 1: Download model
+    if not os.path.exists(MODEL_PATH):
 
-    # Load model
-    model = tf.keras.models.load_model(model_path)
+        st.info("⏳ Downloading model from Hugging Face...")
 
-    # Load class names from GitHub
-    with open("class_names.json") as f:
+        response = requests.get(
+            MODEL_URL,
+            stream=True,
+            timeout=300
+        )
+
+        response.raise_for_status()
+
+        with open(MODEL_PATH, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+    # Step 2: Load model
+    st.info("⏳ Loading AI model...")
+
+    model = tf.keras.models.load_model(MODEL_PATH)
+
+    # Step 3: Load class names
+    with open("class_names.json", "r") as f:
         class_names = json.load(f)
 
     return model, class_names
@@ -34,7 +52,6 @@ model, class_names = load_artifacts()
 
 IMG_SIZE = (224, 224)
 
-
 st.title("Skin Cancer Detection (Benign vs Malignant)")
 
 st.caption(
@@ -42,12 +59,10 @@ st.caption(
     "Always consult a dermatologist."
 )
 
-
 uploaded = st.file_uploader(
     "Upload a skin lesion image",
     type=["jpg", "jpeg", "png"]
 )
-
 
 if uploaded is not None:
 
@@ -66,26 +81,4 @@ if uploaded is not None:
     arr = np.expand_dims(arr, axis=0)
 
     prob = float(
-        model.predict(arr, verbose=0).ravel()[0]
-    )
-
-    pred_idx = int(prob >= 0.5)
-
-    pred_label = class_names[pred_idx]
-
-    confidence = (
-        prob if pred_idx == 1
-        else 1 - prob
-    )
-
-    st.subheader(
-        f"Prediction: **{pred_label.upper()}**"
-    )
-
-    st.write(
-        f"Confidence: {confidence * 100:.1f}%"
-    )
-
-    st.progress(
-        min(max(confidence, 0.0), 1.0)
-    )
+        model.predict(arr, verbose=0).r
